@@ -1,4 +1,5 @@
 *.o
 *.swp
+*.hex
 build-uno/
 credentials.h
