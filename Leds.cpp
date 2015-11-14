@@ -6,8 +6,6 @@ unsigned ledUpdateWaitCycles = DEFAULT_LED_WAIT_CYLES;
 
 void initLeds()
 {
-	// Set button pins (14-17) as inputs. Bits(0-3)
-	DDRC &= 0xF0;
 
 	//Configure our PWM LED pins
 	pinMode(SHADES_LED, OUTPUT);

@@ -6,20 +6,21 @@
 #define SERVER_NAME "192.168.1.101"
 #define SERVER_PORT (1883)
 
-/* input lines for the buttons PORTC*/
-#define SHADES_BTN 0x01
-#define LIGHTS_BTN 0x02
-#define PIXELS_BTN 0x04
-#define FAN_BTN 0x08
+/* input lines for the buttons PORTC (NOT ARDUINO DIGITAL NUMBERS)*/
+#define BTN_1 0x01
+#define BTN_2 0x04
+#define BTN_3 0x02
+#define BTN_4 0x08
 
-#define ESP_RST 2
+#define ESP_CHIP_RESET 4
+#define ESP_CHIP_ENABLE 2
 
 enum Cmd
 {
-	e_cmdShades,
-	e_cmdLights,
-	e_cmdPixels,
-	e_cmdFan,
+	e_cmdButton1,
+	e_cmdButton2,
+	e_cmdButton3,
+	e_cmdButton4,
 	e_cmdUndef
 };
 

@@ -38,16 +38,22 @@ void MqttClient::publish(const char* location, char* mesg)
 	m_mqtt.publish(location, mesg);
 }
 
+void MqttClient::subscribe()
+{
+	m_mqtt.subscribe("/bedroom1/doorPanelLights");
+	// feel free to add more here
+}
+
 
 void MqttClient::onConnected(void* response)
 {
-    debugSerial.println("MQTT Connected!");
+    debugSerial.println("ARDUINO: MQTT Connected!");
     connected = true;
 }
 
 void MqttClient::onDisconnected(void* response)
 {
-    debugSerial.println("MQTT connection was disconnected!");
+    debugSerial.println("ARDUINO: MQTT connection was disconnected!");
     connected = false;
 }
 
@@ -55,11 +61,11 @@ void MqttClient::onData(void* response)
 {
   RESPONSE res(response);
 
-  debugSerial.print("Received: topic=");
+  debugSerial.print("ARDUINO: Received: topic=");
   String topic = res.popString();
   debugSerial.println(topic);
 
-  debugSerial.print("data=");
+  debugSerial.print("ARDUINO: data=");
   String data = res.popString();
   debugSerial.println(data);
 

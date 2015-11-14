@@ -11,7 +11,7 @@
 static bool ledsOff = false;
 
 SoftwareSerial debugSerial(12,13); // Rx, Tx
-ESP esp(&Serial, &debugSerial, ESP_RST);
+ESP esp(&Serial, &debugSerial, ESP_CHIP_ENABLE);
 MqttClient mqttClient(&esp);
 volatile bool wifiConnected = false;
 
@@ -26,23 +26,32 @@ void wifiCb(void* response)
     if(res.getArgc() == 1) {
         res.popArgs((uint8_t*)&status, 4);
         if(status == STATION_GOT_IP) {
-            debugSerial.println("WIFI CONNECTED");
+            debugSerial.println("ARDUINO: WIFI CONNECTED");
             wifiConnected = true;
         }
         else {
-            debugSerial.println("WIFI failed to connect");
+            debugSerial.println("ARDUINO: WIFI failed to connect");
             wifiConnected = false;
+            MqttClient::connected = false;
         }
+    }
+    else
+    {
+        debugSerial.println("ARDUINO: SWifi is doing something unusual...");
     }
 }
 
+
 void setup(void)
 {
-    // Set our buttons as inputs
-    pinMode(SHADES_BTN, INPUT);
-    pinMode(LIGHTS_BTN, INPUT);
-    pinMode(PIXELS_BTN, INPUT);
-    pinMode(FAN_BTN, INPUT);
+
+    // Set button pins (14-17) as inputs. Bits(0-3)
+    DDRC &= 0xF0;
+
+    // Set reset pin as output
+    pinMode(ESP_CHIP_RESET, OUTPUT);
+    // Keep reset pin held high for regular operation
+    digitalWrite(ESP_CHIP_RESET, HIGH);
 
     initLeds();
 
@@ -62,45 +71,55 @@ void espMultipleProcess(short numTimes)
         delay(20);
     }
 }
+
+void hardResetEspChip()
+{
+    digitalWrite(ESP_CHIP_RESET, LOW);
+    delay(20);
+    digitalWrite(ESP_CHIP_RESET, HIGH);
+    delay(20);
+}
 	
 bool sendCmd(Cmd cmd)
 {
-	static const char* itemShades = "Curtains";
-	static const char* itemLights = "Over Head Lights";
-	static const char* itemPixels = "Pixel Wall";
-	static const char* itemFan = "Fan";
+	static const char* itemCurtains = "curtains";
+	static const char* itemLights = "overHeadLights";
+	static const char* itemPixels = "pixelWall";
+	static const char* itemFan = "fan";
 
     // figure out which itemName we are talking to
     const char* itemName = 0;
     switch(cmd)
     {
-    	case e_cmdLights:
-    		itemName = itemLights;
+    	case e_cmdButton1:
+            itemName = itemCurtains;
     		break;
-    	case e_cmdShades:
-    		itemName = itemShades;
+    	case e_cmdButton2:
+            itemName = itemLights;
     		break;
-    	case e_cmdPixels:
+    	case e_cmdButton3:
     		itemName = itemPixels;
     		break;
-    	case e_cmdFan:
+    	case e_cmdButton4:
     		itemName = itemFan;
     		break;
     	default:
-    		debugSerial.println("Bad cmd passed to sendCmd()\n");
+    		debugSerial.println("ARDUINO: Bad cmd passed to sendCmd()\n");
     		itemName = "";
     		return false;
     }
+    char topic[32] = {0};
+    sprintf(topic, "/%s/%s", "bedroom1", itemName);
 
     char mesg[64] = {0};
-    sprintf(mesg, "{\"command\":\"togglePower\",\"name\":\"%s\"}",itemName);
+    sprintf(mesg, "{\"command\":\"toggle\"}");
 
 
     //debugSerial.println("This is what the message looks like: ");
     debugSerial.println(mesg);
 
     // Send out command over mqtt protocol
-    mqttClient.publish("/bedroom", mesg);
+    mqttClient.publish(topic, mesg);
 
     return true;
 }
@@ -114,6 +133,8 @@ void bringUpWifi()
         // Start by putting chip in known state
         esp.enable();
         delay(500);
+        hardResetEspChip();
+        delay(1000);
         esp.reset();
         delay(500);
         while(!esp.ready())
@@ -124,9 +145,11 @@ void bringUpWifi()
             delay(1000);
             if(count >= 3)
             {
-                debugSerial.println("Resetting ESP chip");
+                debugSerial.println("ARDUINO: Resetting ESP chip");
                 esp.enable();
                 delay(500);
+                hardResetEspChip();
+                delay(1000);
                 esp.reset();
                 delay(500);
                 count = 0;
@@ -152,10 +175,12 @@ void bringUpWifi()
 
 void bringUpMqtt()
 {
-    unsigned brokerConnectionTryLimit = 500;
+    unsigned brokerConnectionTryLimit = 10;
     unsigned count = 0;
     // if we lost wifiConnectivity, we need to break out and 
     // go back to bringing up wifi
+    debugSerial.println("ARDUINO: Inside bringUpMqtt()");
+
 
     if( !mqttClient.init() )
     {
@@ -165,12 +190,17 @@ void bringUpMqtt()
 
     while(!MqttClient::connected && (count < brokerConnectionTryLimit) )
     {
-        debugSerial.println("Connecting mqttClient");
+        debugSerial.println("ARDUINO: Connecting mqttClient");
         mqttClient.connect(SERVER_NAME, SERVER_PORT, false);
         // process 10 times
         espMultipleProcess(10);
+        delay(100);
+        espMultipleProcess(10);
+
         ++count;
     }
+    debugSerial.println("ARDUINO: Leaving bringUpMqtt()");
+
     return;
 }
 
@@ -187,18 +217,41 @@ bool forceLedUpdate = true;
 void loop(void)
 {   
 
-    bringUpWifi();
-
-    if(wifiConnected)
+    if(!wifiConnected)
     {
-        bringUpMqtt();
+        debugSerial.println("ARDUINO: Wifi down, bringing it up");
+        bringUpWifi();
+        
+        espMultipleProcess(10);
+        delay(1000);
+
     }
 
+    if(!MqttClient::connected && wifiConnected)
+    {
+        debugSerial.println("ARDUINO: Mqtt down, bringing it up");
+        bringUpMqtt();
+        espMultipleProcess(10);
+        delay(1000);
+    }
+
+    if(MqttClient::connected && !wifiConnected)
+    {
+        debugSerial.println("ARDUINO: Bad state. mqtt somehow connected and wifi isn't");
+        debugSerial.println("ARDUINO: restarting state machine");
+        wifiConnected = false;
+        delay(1000);
+    }
+
+    // subscriptions!!!!
     if(wifiConnected && MqttClient::connected)
     {
-        debugSerial.println("All systems online!");
+        debugSerial.println("ARDUINO: All systems online!");
+        // set subscriptions
+        mqttClient.subscribe();
+        espMultipleProcess(10);
+        delay(1000);
     }
-    
 
     while(wifiConnected && MqttClient::connected)
     {
@@ -212,34 +265,34 @@ void loop(void)
             // lastButtonPressed will be cleared after a time
             if( buttonPressed!=lastButtonPressed )
             {
-            	if( buttonPressed == SHADES_BTN)
+            	if( buttonPressed == BTN_1)
             	{
                     ledsOff = !ledsOff;
                     forceLedUpdate = true;
-            		//if( !sendCmd(e_cmdShades) )
+            		//if( !sendCmd(e_cmdButton1) )
             		//{
-            		//	debugSerial.println("Error sending e_cmdShades");
+            		//	debugSerial.println("Error sending e_cmdButton1");
             		//}
             	}
-            	else if( buttonPressed == LIGHTS_BTN )
+            	else if( buttonPressed == BTN_2 )
             	{
-            		if( !sendCmd(e_cmdLights) )
+            		if( !sendCmd(e_cmdButton2) )
             		{
-            			debugSerial.println("Error sending e_cmdLights");
+            			debugSerial.println("ARDUINO: Error sending e_cmdButton2");
             		}
             	}
-            	else if( buttonPressed == PIXELS_BTN )
+            	else if( buttonPressed == BTN_3 )
             	{
-            		if( !sendCmd(e_cmdPixels) )
+            		if( !sendCmd(e_cmdButton3) )
             		{
-            			debugSerial.println("Error sending e_cmdPixels");
+            			debugSerial.println("ARDUINO: Error sending e_cmdButton3");
             		}
             	}
-            	else if( buttonPressed == FAN_BTN )
+            	else if( buttonPressed == BTN_4 )
             	{
-            		if( !sendCmd(e_cmdFan) )
+            		if( !sendCmd(e_cmdButton4) )
             		{
-            			debugSerial.println("Error sending e_cmdFan");
+            			debugSerial.println("ARDUINO: Error sending e_cmdButton4");
             		}
             	}
 

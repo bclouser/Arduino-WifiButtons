@@ -16,6 +16,7 @@ public:
 	void connect(const char* serverAddr, unsigned port, bool secure=false);
 	void disconnect();
 	void publish(const char* location, char* mesg);
+	void subscribe(); // perform subscriptions
 	static bool connected;
 
 private:
