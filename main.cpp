@@ -37,7 +37,7 @@ void wifiCb(void* response)
     }
     else
     {
-        debugSerial.println("ARDUINO: SWifi is doing something unusual...");
+        debugSerial.println("ARDUINO: Wifi is doing something unusual...");
     }
 }
 
@@ -113,9 +113,8 @@ bool sendCmd(Cmd cmd)
 
     char mesg[64] = {0};
     sprintf(mesg, "{\"command\":\"toggle\"}");
-
-
-    //debugSerial.println("This is what the message looks like: ");
+    debugSerial.println("");
+    debugSerial.println(topic);
     debugSerial.println(mesg);
 
     // Send out command over mqtt protocol
@@ -269,6 +268,9 @@ void loop(void)
             	{
                     ledsOff = !ledsOff;
                     forceLedUpdate = true;
+                    debugSerial.println("Turning Button Leds");
+                    debugSerial.println(ledsOff?"OFF":"ON");
+
             		//if( !sendCmd(e_cmdButton1) )
             		//{
             		//	debugSerial.println("Error sending e_cmdButton1");

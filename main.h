@@ -3,7 +3,7 @@
 
 #include <SoftwareSerial.h>
 
-#define SERVER_NAME "192.168.1.101"
+#define SERVER_NAME "192.168.1.200"
 #define SERVER_PORT (1883)
 
 /* input lines for the buttons PORTC (NOT ARDUINO DIGITAL NUMBERS)*/
